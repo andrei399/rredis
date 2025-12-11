@@ -1,15 +1,27 @@
 use papaya::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use tokio::net::tcp::OwnedReadHalf;
 use tokio::net::{TcpListener, TcpStream};
+use std::thread;
 
 type Db = Arc<HashMap<String, String>>;
 
 enum Commands {
-    Get { key: String },
-    Set { key: String, value: String },
+    Get {
+        key: String,
+    },
+    Set {
+        key: String,
+        value: String,
+    },
+    Setex {
+        key: String,
+        seconds: u64,
+        value: String,
+    },
 }
 
 impl Commands {
@@ -20,7 +32,7 @@ impl Commands {
         if n == 0 {
             return Err(io::Error::new(
                 io::ErrorKind::ConnectionAborted,
-                "Client sent no data",
+                "-ERROR: Client sent no data",
             ));
         }
 
@@ -28,13 +40,13 @@ impl Commands {
         let mut split = input.split_whitespace();
         let command_type = split
             .next()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Missing command type"))?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "-ERROR: Missing command"))?;
         match command_type.to_uppercase().as_str() {
             "GET" => {
                 let key = split
                     .next()
                     .ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidInput, "GET requires a key")
+                        io::Error::new(io::ErrorKind::InvalidInput, "-ERROR: GET requires a key")
                     })?
                     .to_string();
                 Ok(Commands::Get { key })
@@ -45,7 +57,7 @@ impl Commands {
                     .ok_or_else(|| {
                         io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            "SET requires a key as the first parameter",
+                            "-ERROR: SET requires a key as the first parameter",
                         )
                     })?
                     .to_string();
@@ -54,15 +66,55 @@ impl Commands {
                     .ok_or_else(|| {
                         io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            "SET requires a value as the second parameter",
+                            "-ERROR: SET requires a value as the second parameter",
                         )
                     })?
                     .to_string();
                 Ok(Commands::Set { key, value })
             }
+            "SETEX" => {
+                let key = split
+                    .next()
+                    .ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "-ERROR: SET requires a key as the first parameter",
+                        )
+                    })?
+                    .to_string();
+                let seconds = split
+                    .next()
+                    .ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "-ERROR: SETEX requires 'seconds' as the second parameter",
+                        )
+                    })?
+                    .parse::<u64>()
+                    .map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "-ERROR: SETEX 'seconds' parameter needs to be of type: u64",
+                        )
+                    })?;
+                let value = split
+                    .next()
+                    .ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "-ERROR: SET requires a value as the third parameter",
+                        )
+                    })?
+                    .to_string();
+                Ok(Commands::Setex {
+                    key,
+                    seconds,
+                    value,
+                })
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "Unknown command.",
+                "-ERROR: Unknown command.",
             )),
         }
     }
@@ -103,9 +155,21 @@ async fn handle_request(socket: TcpStream, storage: &Db) -> io::Result<()> {
             Commands::Get { key } => db
                 .get(&key)
                 .map(|val| format!("+{}\r\n", val))
-                .unwrap_or_else(|| "-Key not found".to_string()),
+                .unwrap_or_else(|| "-ERROR: Key \"{key}\" not found".to_string()),
             Commands::Set { key, value } => {
                 db.insert(key, value);
+                String::from_str("+OK\r\n").unwrap()
+            },
+            Commands::Setex { key, seconds, value } => {
+                db.insert(key.clone(), value);
+                drop(db);
+                let storage_clone = storage.clone();
+                tokio::spawn(async move {
+                    thread::sleep(Duration::from_secs(seconds));
+                    let db = storage_clone.pin();
+                    db.remove(key.as_str());
+                    drop(db);
+                });
                 String::from_str("+OK\r\n").unwrap()
             }
         }
