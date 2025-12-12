@@ -1,6 +1,6 @@
+use papaya::HashMap;
 use std::str::{FromStr, SplitWhitespace};
 use std::sync::Arc;
-use papaya::{HashMap};
 use tokio::io::Result;
 
 use tokio::io::{self, AsyncReadExt};
@@ -50,6 +50,15 @@ pub enum Commands {
         seconds: u64,
         value: String,
     },
+    Del {
+        key: String,
+    },
+    Incr {
+        key: String,
+    },
+    Decr {
+        key: String,
+    },
 }
 
 impl Commands {
@@ -71,24 +80,27 @@ impl Commands {
         })?;
         let mut parser = Parser { split: &mut split };
         match command_type.to_uppercase().as_str() {
-            "GET" => {
-                Ok(Commands::Get {
-                    key: parser.parse_key()?,
-                })
-            }
-            "SET" => {
-                Ok(Commands::Set {
-                    key: parser.parse_key()?,
-                    value: parser.parse_value()?,
-                })
-            }
-            "SETEX" => {
-                Ok(Commands::Setex {
-                    key: parser.parse_key()?,
-                    seconds: parser.parse_seconds()?,
-                    value: parser.parse_value()?,
-                })
-            }
+            "GET" => Ok(Commands::Get {
+                key: parser.parse_key()?,
+            }),
+            "SET" => Ok(Commands::Set {
+                key: parser.parse_key()?,
+                value: parser.parse_value()?,
+            }),
+            "SETEX" => Ok(Commands::Setex {
+                key: parser.parse_key()?,
+                seconds: parser.parse_seconds()?,
+                value: parser.parse_value()?,
+            }),
+            "DEL" => Ok(Commands::Del {
+                key: parser.parse_key()?,
+            }),
+            "INCR" => Ok(Commands::Incr {
+                key: parser.parse_key()?,
+            }),
+            "DECR" => Ok(Commands::Decr {
+                key: parser.parse_key()?,
+            }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "-ERROR: Unknown command.",
@@ -105,9 +117,13 @@ impl Commands {
                 .unwrap_or_else(|| format!("-ERROR: Key \"{key}\" not found").to_string()),
             Commands::Set { key, value } => {
                 db.insert(key.clone(), value.clone());
-                String::from_str("+OK\r\n").unwrap()
-            },
-            Commands::Setex { key, seconds, value } => {
+                format!("+{value}\r\n")
+            }
+            Commands::Setex {
+                key,
+                seconds,
+                value,
+            } => {
                 db.insert(key.clone(), value.clone());
                 drop(db);
                 let key_clone = key.clone();
@@ -121,8 +137,39 @@ impl Commands {
                 });
                 String::from_str("+OK\r\n").unwrap()
             }
+            Commands::Del { key } => {
+                db.remove(key);
+                String::from_str("+OK\r\n").unwrap()
+            }
+            Commands::Incr { key } => match db.get(key) {
+                Some(val) => {
+                    let parsed_value = val.parse::<i64>().map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "-ERROR: Value is not a valid integer",
+                        )
+                    })?;
+                    let new_value = parsed_value + 1;
+                    db.update(key.to_string(), |_| new_value.to_string());
+                    format!("+{new_value}\r\n")
+                }
+                None => format!("-ERROR: Key \"{}\" not found", &key),
+            },
+            Commands::Decr { key } => match db.get(key) {
+                Some(val) => {
+                    let parsed_value = val.parse::<i64>().map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "-ERROR: Value is not a valid integer",
+                        )
+                    })?;
+                    let new_value = parsed_value - 1;
+                    db.update(key.to_string(), |_| new_value.to_string());
+                    format!("+{new_value}\r\n")
+                }
+                None => format!("-ERROR: Key \"{}\" not found", &key),
+            },
         };
         Ok(result)
     }
 }
-

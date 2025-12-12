@@ -30,12 +30,19 @@ async fn handle_request(socket: TcpStream, storage: &Db) -> io::Result<()> {
     let mut command = match Commands::parse_command(read_half).await {
         Ok(cmd) => cmd,
         Err(e) => {
-            write_half.write_all(format!("{}\r\n", e).as_bytes()).await?;
+            write_half.write_all(format!("{e}\r\n").as_bytes()).await?;
+            return Ok(());
+        }
+    };
+    let result = match command.execute(&storage).await {
+        Ok(result) => result,
+        Err(e) => {
+            write_half.write_all(format!("{e}\r\n").as_bytes()).await?;
             return Ok(());
         }
     };
 
-    write_half.write_all(command.execute(&storage).await?.as_bytes()).await?;
+    write_half.write_all(result.as_bytes()).await?;
     write_half.flush().await?;
     Ok(())
 }
