@@ -40,27 +40,17 @@ impl Parser<'_> {
 }
 
 pub enum Commands {
-    Get {
-        key: String,
-    },
-    Set {
-        key: String,
-        value: String,
-    },
+    Get { key: String },
+    Set { key: String, value: String },
     Setex {
         key: String,
         seconds: u64,
         value: String,
     },
-    Del {
-        key: String,
-    },
-    Incr {
-        key: String,
-    },
-    Decr {
-        key: String,
-    },
+    Del { key: String },
+    Exists { key: String },
+    Incr { key: String },
+    Decr { key: String },
 }
 
 impl Commands {
@@ -97,6 +87,7 @@ impl Commands {
             "DEL" => Ok(Commands::Del {
                 key: parser.parse_key()?,
             }),
+            "EXISTS" => Ok(Commands::Exists { key: parser.parse_key()? }),
             "INCR" => Ok(Commands::Incr {
                 key: parser.parse_key()?,
             }),
@@ -108,6 +99,10 @@ impl Commands {
                 "-ERROR: Unknown command.",
             )),
         }
+    }
+
+    fn exists(db: &mut HashMapRef<String, String, RandomState, LocalGuard>, key: &str) -> bool {
+        db.get(key).is_some()
     }
 
     fn modify_integer_value(
@@ -166,6 +161,13 @@ impl Commands {
                 db.remove(key);
                 String::from_str("+OK\r\n").unwrap()
             }
+            Commands::Exists { key } => {
+                let result = Commands::exists(&mut db, key);
+                match result {
+                    true => String::from_str("+true\r\n").unwrap(),
+                    false => String::from_str("+false\r\n").unwrap()
+                }
+            },
             Commands::Incr { key } => Commands::modify_integer_value(&mut db, &key, |x| x + 1)
                 .unwrap_or_else(|e| format!("-ERROR: {}", e.kind())),
             Commands::Decr { key } => Commands::modify_integer_value(&mut db, &key, |x| x - 1)
