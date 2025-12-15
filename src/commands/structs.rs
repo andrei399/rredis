@@ -1,81 +1,12 @@
-use papaya::{HashMapRef, LocalGuard};
-use std::hash::RandomState;
 use std::iter::zip;
-use std::str::{FromStr, SplitWhitespace};
+use std::str::FromStr;
 use tokio::io::Result;
 
 use tokio::io::{self, AsyncReadExt};
 use tokio::net::tcp::OwnedReadHalf;
 
-use crate::storage::Db;
-
-struct Parser<'a> {
-    split: &'a mut SplitWhitespace<'a>,
-}
-impl Parser<'_> {
-    fn base_parse(&mut self, param_name: &str) -> Result<&str> {
-        let result = self.split.next().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("-ERROR: {param_name} parameter is required."),
-            )
-        })?;
-        Ok(result)
-    }
-    fn parse_key(&mut self) -> Result<String> {
-        Ok(self.base_parse("KEY")?.to_string())
-    }
-    fn parse_value(&mut self) -> Result<String> {
-        Ok(self.base_parse("VALUE")?.to_string())
-    }
-    fn parse_seconds(&mut self) -> Result<u64> {
-        let param_name = "SECONDS";
-        let seconds = self.base_parse(param_name)?.parse::<u64>().map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "-ERROR: SECONDS parameter needs to be of type: u64",
-            )
-        })?;
-        Ok(seconds)
-    }
-    fn parse_keys(&mut self) -> Result<Vec<String>> {
-        let keys: Vec<String> = self.split.map(|s| s.to_string()).collect();
-        if keys.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "-ERROR: MGET requires at least one KEY parameter.",
-            ));
-        }
-        Ok(keys)
-    }
-    fn parse_key_value_pairs(&mut self) -> Result<(Vec<String>, Vec<String>)> {
-        let args: Vec<String> = self.split.map(|s| s.to_string()).collect();
-        if args.is_empty() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "-ERROR: MSET requires at least one KEY VALUE pair parameter.",
-            ));
-        }
-        if args.len() % 2 != 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "-ERROR: Uneven number of keys and values.",
-            ));
-        }
-        let mut keys: Vec<String> = [].to_vec();
-        let mut values: Vec<String> = [].to_vec();
-        let mut i = 0;
-        for arg in args {
-            if i % 2 == 1 {
-                values.push(arg.to_string());
-            } else {
-                keys.push(arg.to_string());
-            }
-            i += 1;
-        }
-        Ok((keys, values))
-    }
-}
+use crate::commands::parser::Parser;
+use crate::storage::{Db, DbRef, DbValue, GetResult};
 
 pub enum Commands {
     Get {
@@ -112,6 +43,15 @@ pub enum Commands {
 }
 
 impl Commands {
+    pub fn execute_get(db: &mut DbRef<'_>, key: &str) -> GetResult {
+        match db.get(key) {
+            Some(db_value) => match db_value {
+                DbValue::String(s) => GetResult::FoundString(s.clone()),
+                DbValue::List(l) => GetResult::FoundList(l.clone()),
+            },
+            None => GetResult::NotFound(key.to_string()),
+        }
+    }
     pub async fn parse_command(mut read_half: OwnedReadHalf) -> io::Result<Commands> {
         let mut buffer = [0u8; 1024];
         let n = read_half.read(&mut buffer).await?;
@@ -168,17 +108,13 @@ impl Commands {
         }
     }
 
-    fn exists(db: &mut HashMapRef<String, String, RandomState, LocalGuard>, key: &str) -> bool {
-        db.get(key).is_some()
-    }
-
     fn modify_integer_value(
-        db: &mut HashMapRef<String, String, RandomState, LocalGuard>,
+        db: &mut DbRef<'_>,
         key: &str,
         operation: impl Fn(i64) -> i64,
     ) -> Result<String> {
-        match db.get(key) {
-            Some(val) => {
+        match Commands::execute_get(db, key) {
+            GetResult::FoundString(val) => {
                 let parsed_value = val.parse::<i64>().map_err(|_| {
                     io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -188,10 +124,11 @@ impl Commands {
 
                 let new_value = operation(parsed_value);
 
-                db.update(key.to_string(), |_| new_value.to_string());
+                db.update(key.to_string(), |_| DbValue::String(new_value.to_string()));
                 Ok(format!("+{new_value}\r\n"))
             }
-            None => Ok(format!("-ERROR: Key \"{}\" not found", key)),
+            GetResult::NotFound(_) => Ok(format!("-ERROR: Key \"{}\" not found", key)),
+            _ => Ok(String::from_str("-ERROR: Cannot convert this type to an integer").unwrap())
         }
     }
 
@@ -203,7 +140,7 @@ impl Commands {
                 .map(|val| format!("+{}\r\n", val))
                 .unwrap_or_else(|| format!("-ERROR: Key \"{key}\" not found").to_string()),
             Commands::Set { key, value } => {
-                db.insert(key.clone(), value.clone());
+                db.insert(key.clone(), DbValue::String(value.clone()));
                 format!("+{value}\r\n")
             }
             Commands::Setex {
@@ -211,7 +148,7 @@ impl Commands {
                 seconds,
                 value,
             } => {
-                db.insert(key.clone(), value.clone());
+                db.insert(key.clone(), DbValue::String(value.clone()));
                 drop(db);
                 let key_clone = key.clone();
                 let duration_seconds = *seconds;
@@ -229,10 +166,9 @@ impl Commands {
                 String::from_str("+OK\r\n").unwrap()
             }
             Commands::Exists { key } => {
-                let result = Commands::exists(&mut db, key);
-                match result {
-                    true => String::from_str("+true\r\n").unwrap(),
-                    false => String::from_str("+false\r\n").unwrap(),
+                match Commands::execute_get(&mut db, key) {
+                    GetResult::NotFound(_) => String::from_str("+false\r\n").unwrap(),
+                    _ => String::from_str("+true\r\n").unwrap(),
                 }
             }
             Commands::Incr { key } => Commands::modify_integer_value(&mut db, &key, |x| x + 1)
@@ -253,7 +189,7 @@ impl Commands {
             Commands::Mset { keys, values } => {
                 let mut message: Vec<String> = [].to_vec();
                 for (i, (key, value)) in zip(keys, values).enumerate() {
-                    db.insert(key.clone(), value.clone());
+                    db.insert(key.clone(), DbValue::String(value.clone()));
                     message.push(format!("{}) {}", i + 1, value));
                 }
                 format!("+{}", message.join("\r\n")).to_string()
