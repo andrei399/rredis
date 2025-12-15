@@ -40,6 +40,14 @@ pub enum Commands {
         keys: Vec<String>,
         values: Vec<String>,
     },
+    Lpush {
+        key: String,
+        value: String,
+    },
+    Rpush {
+        key: String,
+        value: String,
+    },
 }
 
 impl Commands {
@@ -101,6 +109,14 @@ impl Commands {
                 let (keys, values) = parser.parse_key_value_pairs()?;
                 Ok(Commands::Mset { keys, values })
             }
+            "LPUSH" => Ok(Commands::Lpush {
+                key: parser.parse_key()?,
+                value: parser.parse_value()?,
+            }),
+            "RPUSH" => Ok(Commands::Rpush {
+                key: parser.parse_key()?,
+                value: parser.parse_value()?,
+            }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "-ERROR: Unknown command.",
@@ -128,7 +144,31 @@ impl Commands {
                 Ok(format!("+{new_value}\r\n"))
             }
             GetResult::NotFound(_) => Ok(format!("-ERROR: Key \"{}\" not found", key)),
-            _ => Ok(String::from_str("-ERROR: Cannot convert this type to an integer").unwrap())
+            _ => Ok(String::from_str("-ERROR: Cannot convert this type to an integer").unwrap()),
+        }
+    }
+
+    fn push_list_element(
+        db: &mut DbRef<'_>,
+        key: &str,
+        value: &str,
+        operation: impl FnOnce(&mut Vec<String>, String),
+    ) -> String {
+        let current_value = Commands::execute_get(db, key);
+        match current_value {
+            GetResult::FoundList(mut list) => {
+                operation(&mut list, value.to_string());
+                db.insert(key.to_string(), DbValue::List(list.clone()));
+                format!("+{:?}\r\n", list)
+            }
+            GetResult::NotFound(_) => {
+                let mut list = Vec::new();
+                operation(&mut list, value.to_string());
+                let new_value = DbValue::List(list.clone());
+                db.insert(key.to_string(), new_value);
+                format!("+{:?}\r\n", list)
+            }
+            _ => format!("-ERROR: Key '{key}' is already assigned to an incompatible type.\r\n"),
         }
     }
 
@@ -165,12 +205,10 @@ impl Commands {
                 db.remove(key);
                 String::from_str("+OK\r\n").unwrap()
             }
-            Commands::Exists { key } => {
-                match Commands::execute_get(&mut db, key) {
-                    GetResult::NotFound(_) => String::from_str("+false\r\n").unwrap(),
-                    _ => String::from_str("+true\r\n").unwrap(),
-                }
-            }
+            Commands::Exists { key } => match Commands::execute_get(&mut db, key) {
+                GetResult::NotFound(_) => String::from_str("+false\r\n").unwrap(),
+                _ => String::from_str("+true\r\n").unwrap(),
+            },
             Commands::Incr { key } => Commands::modify_integer_value(&mut db, &key, |x| x + 1)
                 .unwrap_or_else(|e| format!("-ERROR: {}", e.kind())),
             Commands::Decr { key } => Commands::modify_integer_value(&mut db, &key, |x| x - 1)
@@ -193,6 +231,16 @@ impl Commands {
                     message.push(format!("{}) {}", i + 1, value));
                 }
                 format!("+{}", message.join("\r\n")).to_string()
+            }
+            Commands::Lpush { key, value } => {
+                Commands::push_list_element(&mut db, key, value, |list, value| {
+                    list.insert(0, value.to_string())
+                })
+            }
+            Commands::Rpush { key, value } => {
+                Commands::push_list_element(&mut db, key, value, |list, value| {
+                    list.push(value.to_string())
+                })
             }
         };
         Ok(result)

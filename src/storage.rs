@@ -1,6 +1,7 @@
 use papaya::{HashMap, HashMapRef, LocalGuard};
 use std::{fmt, hash::RandomState, sync::Arc};
 
+#[derive(Clone)]
 pub enum DbValue {
     String(String),
     List(Vec<String>),
@@ -25,17 +26,16 @@ pub enum GetResult {
 impl fmt::Display for GetResult {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GetResult::FoundString(s) => {
-                write!(f, "+{}\r\n", s)
+            GetResult::FoundString(string) => {
+                write!(f, "+{}\r\n", string)
             }
-            GetResult::FoundList(l) => {
-                let list_str = format!("[{}]", l.join(", "));
+            GetResult::FoundList(list) => {
+                let list_str = format!("[{}]", list.join(", "));
                 write!(f, "+{}\r\n", list_str)
             }
 
-            GetResult::NotFound(k) => {
-                // Format: Error Reply (-ERROR message\r\n)
-                write!(f, "-ERROR: Key \"{}\" not found\r\n", k)
+            GetResult::NotFound(key) => {
+                write!(f, "-ERROR: Key \"{}\" not found\r\n", key)
             }
         }
     }
