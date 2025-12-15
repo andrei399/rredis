@@ -1,10 +1,12 @@
-use papaya::HashMap;
+use papaya::{HashMapRef, LocalGuard};
+use std::hash::RandomState;
 use std::str::{FromStr, SplitWhitespace};
-use std::sync::Arc;
 use tokio::io::Result;
 
 use tokio::io::{self, AsyncReadExt};
 use tokio::net::tcp::OwnedReadHalf;
+
+use crate::storage::Db;
 
 struct Parser<'a> {
     split: &'a mut SplitWhitespace<'a>,
@@ -108,8 +110,31 @@ impl Commands {
         }
     }
 
-    pub async fn execute(&mut self, storage: &Arc<HashMap<String, String>>) -> Result<String> {
-        let db = storage.pin();
+    fn modify_integer_value(
+        db: &mut HashMapRef<String, String, RandomState, LocalGuard>,
+        key: &str,
+        operation: impl Fn(i64) -> i64,
+    ) -> Result<String> {
+        match db.get(key) {
+            Some(val) => {
+                let parsed_value = val.parse::<i64>().map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "-ERROR: Value is not a valid integer",
+                    )
+                })?;
+
+                let new_value = operation(parsed_value);
+
+                db.update(key.to_string(), |_| new_value.to_string());
+                Ok(format!("+{new_value}\r\n"))
+            }
+            None => Ok(format!("-ERROR: Key \"{}\" not found", key)),
+        }
+    }
+
+    pub async fn execute(&mut self, storage: &Db) -> Result<String> {
+        let mut db = storage.pin();
         let result = match self {
             Commands::Get { key } => db
                 .get(key)
@@ -141,34 +166,10 @@ impl Commands {
                 db.remove(key);
                 String::from_str("+OK\r\n").unwrap()
             }
-            Commands::Incr { key } => match db.get(key) {
-                Some(val) => {
-                    let parsed_value = val.parse::<i64>().map_err(|_| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "-ERROR: Value is not a valid integer",
-                        )
-                    })?;
-                    let new_value = parsed_value + 1;
-                    db.update(key.to_string(), |_| new_value.to_string());
-                    format!("+{new_value}\r\n")
-                }
-                None => format!("-ERROR: Key \"{}\" not found", &key),
-            },
-            Commands::Decr { key } => match db.get(key) {
-                Some(val) => {
-                    let parsed_value = val.parse::<i64>().map_err(|_| {
-                        io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "-ERROR: Value is not a valid integer",
-                        )
-                    })?;
-                    let new_value = parsed_value - 1;
-                    db.update(key.to_string(), |_| new_value.to_string());
-                    format!("+{new_value}\r\n")
-                }
-                None => format!("-ERROR: Key \"{}\" not found", &key),
-            },
+            Commands::Incr { key } => Commands::modify_integer_value(&mut db, &key, |x| x + 1)
+                .unwrap_or_else(|e| format!("-ERROR: {}", e.kind())),
+            Commands::Decr { key } => Commands::modify_integer_value(&mut db, &key, |x| x - 1)
+                .unwrap_or_else(|e| format!("-ERROR: {}", e.kind())),
         };
         Ok(result)
     }

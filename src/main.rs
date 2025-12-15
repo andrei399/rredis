@@ -1,11 +1,13 @@
 use papaya::HashMap;
+
 use std::sync::Arc;
 use tokio::io::{self, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use crate::commands::structs::Commands;
+use crate::storage::Db;
 pub mod commands;
+pub mod storage;
 
-type Db = Arc<HashMap<String, String>>;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
