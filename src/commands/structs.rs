@@ -1,5 +1,6 @@
 use papaya::{HashMapRef, LocalGuard};
 use std::hash::RandomState;
+use std::iter::zip;
 use std::str::{FromStr, SplitWhitespace};
 use tokio::io::Result;
 
@@ -37,20 +38,77 @@ impl Parser<'_> {
         })?;
         Ok(seconds)
     }
+    fn parse_keys(&mut self) -> Result<Vec<String>> {
+        let keys: Vec<String> = self.split.map(|s| s.to_string()).collect();
+        if keys.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "-ERROR: MGET requires at least one KEY parameter.",
+            ));
+        }
+        Ok(keys)
+    }
+    fn parse_key_value_pairs(&mut self) -> Result<(Vec<String>, Vec<String>)> {
+        let args: Vec<String> = self.split.map(|s| s.to_string()).collect();
+        if args.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "-ERROR: MSET requires at least one KEY VALUE pair parameter.",
+            ));
+        }
+        if args.len() % 2 != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "-ERROR: Uneven number of keys and values.",
+            ));
+        }
+        let mut keys: Vec<String> = [].to_vec();
+        let mut values: Vec<String> = [].to_vec();
+        let mut i = 0;
+        for arg in args {
+            if i % 2 == 1 {
+                values.push(arg.to_string());
+            } else {
+                keys.push(arg.to_string());
+            }
+            i += 1;
+        }
+        Ok((keys, values))
+    }
 }
 
 pub enum Commands {
-    Get { key: String },
-    Set { key: String, value: String },
+    Get {
+        key: String,
+    },
+    Set {
+        key: String,
+        value: String,
+    },
     Setex {
         key: String,
         seconds: u64,
         value: String,
     },
-    Del { key: String },
-    Exists { key: String },
-    Incr { key: String },
-    Decr { key: String },
+    Del {
+        key: String,
+    },
+    Exists {
+        key: String,
+    },
+    Incr {
+        key: String,
+    },
+    Decr {
+        key: String,
+    },
+    Mget {
+        keys: Vec<String>,
+    },
+    Mset {
+        keys: Vec<String>,
+        values: Vec<String>,
+    },
 }
 
 impl Commands {
@@ -87,13 +145,22 @@ impl Commands {
             "DEL" => Ok(Commands::Del {
                 key: parser.parse_key()?,
             }),
-            "EXISTS" => Ok(Commands::Exists { key: parser.parse_key()? }),
+            "EXISTS" => Ok(Commands::Exists {
+                key: parser.parse_key()?,
+            }),
             "INCR" => Ok(Commands::Incr {
                 key: parser.parse_key()?,
             }),
             "DECR" => Ok(Commands::Decr {
                 key: parser.parse_key()?,
             }),
+            "MGET" => Ok(Commands::Mget {
+                keys: parser.parse_keys()?,
+            }),
+            "MSET" => {
+                let (keys, values) = parser.parse_key_value_pairs()?;
+                Ok(Commands::Mset { keys, values })
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "-ERROR: Unknown command.",
@@ -165,13 +232,32 @@ impl Commands {
                 let result = Commands::exists(&mut db, key);
                 match result {
                     true => String::from_str("+true\r\n").unwrap(),
-                    false => String::from_str("+false\r\n").unwrap()
+                    false => String::from_str("+false\r\n").unwrap(),
                 }
-            },
+            }
             Commands::Incr { key } => Commands::modify_integer_value(&mut db, &key, |x| x + 1)
                 .unwrap_or_else(|e| format!("-ERROR: {}", e.kind())),
             Commands::Decr { key } => Commands::modify_integer_value(&mut db, &key, |x| x - 1)
                 .unwrap_or_else(|e| format!("-ERROR: {}", e.kind())),
+            Commands::Mget { keys } => {
+                let mut message: Vec<String> = [].to_vec();
+                for (i, key) in keys.iter().enumerate() {
+                    message.push(
+                        db.get(&key.clone())
+                            .map(|v| format!("{}) {}", i + 1, v).to_string())
+                            .unwrap_or_else(|| format!("{}) (nil)", i + 1).to_string()),
+                    );
+                }
+                format!("+{}", message.join("\r\n")).to_string()
+            }
+            Commands::Mset { keys, values } => {
+                let mut message: Vec<String> = [].to_vec();
+                for (i, (key, value)) in zip(keys, values).enumerate() {
+                    db.insert(key.clone(), value.clone());
+                    message.push(format!("{}) {}", i + 1, value));
+                }
+                format!("+{}", message.join("\r\n")).to_string()
+            }
         };
         Ok(result)
     }
