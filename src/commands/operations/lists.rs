@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::str::FromStr;
 
 use crate::commands::operations::generic::get_dbvalue;
 use crate::storage::{DbRef, DbValue, GetResult};
@@ -24,5 +25,24 @@ pub fn modify_list_in_db(
             format!("+{:?}\r\n", list)
         }
         _ => format!("-ERROR: Key '{key}' is already assigned to an incompatible type.\r\n"),
+    }
+}
+
+pub fn len_of_list_in_db(db: &mut DbRef<'_>, key: &str) -> String {
+    match get_dbvalue(db, key) {
+        GetResult::FoundList(list) => format!("+{:?}\r\n", list.len()),
+        _ => String::from_str("-ERROR: Key not found or value is of another incompatible type")
+            .unwrap(),
+    }
+}
+
+pub fn get_list_with_range(db: &mut DbRef<'_>, key: &str, start: usize, stop: usize) -> String {
+    match get_dbvalue(db, key) {
+        GetResult::FoundList(list) => format!(
+            "+{:?}\r\n",
+            list.range(start..stop).cloned().collect::<Vec<String>>()
+        ),
+        _ => String::from_str("-ERROR: Key not found or value is of another incompatible type")
+            .unwrap(),
     }
 }

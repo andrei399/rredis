@@ -1,7 +1,7 @@
-use std::str::SplitWhitespace;
-use tokio::io::{self, Result, AsyncReadExt};
-use tokio::net::tcp::OwnedReadHalf;
 use crate::commands::core::Commands;
+use std::str::{FromStr, SplitWhitespace};
+use tokio::io::{self, AsyncReadExt, Result};
+use tokio::net::tcp::OwnedReadHalf;
 
 pub struct CommandParser<'a> {
     pub split: &'a mut SplitWhitespace<'a>,
@@ -22,12 +22,15 @@ impl CommandParser<'_> {
     pub fn parse_value(&mut self) -> Result<String> {
         Ok(self.base_parse("VALUE")?.to_string())
     }
-    pub fn parse_seconds(&mut self) -> Result<u64> {
-        let param_name = "SECONDS";
-        let seconds = self.base_parse(param_name)?.parse::<u64>().map_err(|_| {
+    pub fn parse_numeric_value<T>(&mut self, name: &str) -> Result<T>
+    where 
+        T: FromStr,
+        <T as FromStr>::Err: std::error::Error + Send + Sync + 'static,
+    {
+        let seconds = self.base_parse(name)?.parse::<T>().map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "-ERROR: SECONDS parameter needs to be of type: u64",
+                format!("-ERROR: Parameter '{name}' failed to parse. Expected numeric type. Details: {e}"),
             )
         })?;
         Ok(seconds)
@@ -101,7 +104,7 @@ impl CommandParser<'_> {
             }),
             "SETEX" => Ok(Commands::Setex {
                 key: parser.parse_key()?,
-                seconds: parser.parse_seconds()?,
+                seconds: parser.parse_numeric_value("SECONDS")?,
                 value: parser.parse_value()?,
             }),
             "DEL" => Ok(Commands::Del {
@@ -122,7 +125,7 @@ impl CommandParser<'_> {
             "MSET" => {
                 let (keys, values) = parser.parse_key_value_pairs()?;
                 Ok(Commands::Mset { keys, values })
-            },
+            }
             "APPEND" => Ok(Commands::Append {
                 key: parser.parse_key()?,
                 value: parser.parse_value()?,
@@ -135,8 +138,20 @@ impl CommandParser<'_> {
                 key: parser.parse_key()?,
                 value: parser.parse_value()?,
             }),
-            "LPOP" => Ok(Commands::Lpop { key: parser.parse_key()? }),
-            "RPOP" => Ok(Commands::Rpop { key: parser.parse_key()? }),
+            "LPOP" => Ok(Commands::Lpop {
+                key: parser.parse_key()?,
+            }),
+            "RPOP" => Ok(Commands::Rpop {
+                key: parser.parse_key()?,
+            }),
+            "LLEN" => Ok(Commands::Llen {
+                key: parser.parse_key()?,
+            }),
+            "LRANGE" => Ok(Commands::Lrange {
+                key: parser.parse_key()?,
+                start: parser.parse_numeric_value("START")?,
+                stop: parser.parse_numeric_value("STOP")?,
+            }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "-ERROR: Unknown command.",
