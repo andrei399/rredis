@@ -3,10 +3,10 @@ use papaya::HashMap;
 use std::sync::Arc;
 use tokio::io::{self, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use crate::commands::structs::Commands;
 use crate::storage::Db;
-pub mod commands;
+use crate::commands::parser::CommandParser;
 pub mod storage;
+pub mod commands;
 
 
 #[tokio::main]
@@ -29,7 +29,7 @@ async fn main() -> io::Result<()> {
 
 async fn handle_request(socket: TcpStream, storage: &Db) -> io::Result<()> {
     let (read_half, mut write_half) = socket.into_split();
-    let mut command = match Commands::parse_command(read_half).await {
+    let mut command = match CommandParser::parse_command(read_half).await {
         Ok(cmd) => cmd,
         Err(e) => {
             write_half.write_all(format!("{e}\r\n").as_bytes()).await?;

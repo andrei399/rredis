@@ -1,11 +1,12 @@
 use std::str::SplitWhitespace;
-use tokio::io;
-use tokio::io::Result;
+use tokio::io::{self, Result, AsyncReadExt};
+use tokio::net::tcp::OwnedReadHalf;
+use crate::commands::core::Commands;
 
-pub struct Parser<'a> {
+pub struct CommandParser<'a> {
     pub split: &'a mut SplitWhitespace<'a>,
 }
-impl Parser<'_> {
+impl CommandParser<'_> {
     fn base_parse(&mut self, param_name: &str) -> Result<&str> {
         let result = self.split.next().ok_or_else(|| {
             io::Error::new(
@@ -67,5 +68,69 @@ impl Parser<'_> {
             i += 1;
         }
         Ok((keys, values))
+    }
+
+    pub async fn parse_command(mut read_half: OwnedReadHalf) -> io::Result<Commands> {
+        let mut buffer = [0u8; 1024];
+        let n = read_half.read(&mut buffer).await?;
+
+        if n == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "-ERROR: Client sent no data",
+            ));
+        }
+
+        let input = String::from_utf8_lossy(&buffer[..n]);
+        let mut split = input.split_whitespace();
+        let command_type = split.next().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "-ERROR: Missing command")
+        })?;
+        let mut parser = CommandParser { split: &mut split };
+        match command_type.to_uppercase().as_str() {
+            "GET" => Ok(Commands::Get {
+                key: parser.parse_key()?,
+            }),
+            "SET" => Ok(Commands::Set {
+                key: parser.parse_key()?,
+                value: parser.parse_value()?,
+            }),
+            "SETEX" => Ok(Commands::Setex {
+                key: parser.parse_key()?,
+                seconds: parser.parse_seconds()?,
+                value: parser.parse_value()?,
+            }),
+            "DEL" => Ok(Commands::Del {
+                key: parser.parse_key()?,
+            }),
+            "EXISTS" => Ok(Commands::Exists {
+                key: parser.parse_key()?,
+            }),
+            "INCR" => Ok(Commands::Incr {
+                key: parser.parse_key()?,
+            }),
+            "DECR" => Ok(Commands::Decr {
+                key: parser.parse_key()?,
+            }),
+            "MGET" => Ok(Commands::Mget {
+                keys: parser.parse_keys()?,
+            }),
+            "MSET" => {
+                let (keys, values) = parser.parse_key_value_pairs()?;
+                Ok(Commands::Mset { keys, values })
+            }
+            "LPUSH" => Ok(Commands::Lpush {
+                key: parser.parse_key()?,
+                value: parser.parse_value()?,
+            }),
+            "RPUSH" => Ok(Commands::Rpush {
+                key: parser.parse_key()?,
+                value: parser.parse_value()?,
+            }),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "-ERROR: Unknown command.",
+            )),
+        }
     }
 }
