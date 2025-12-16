@@ -91,6 +91,10 @@ impl CommandParser<'_> {
             "GET" => Ok(Commands::Get {
                 key: parser.parse_key()?,
             }),
+            "GETSET" => Ok(Commands::Getset {
+                key: parser.parse_key()?,
+                value: parser.parse_value()?,
+            }),
             "SET" => Ok(Commands::Set {
                 key: parser.parse_key()?,
                 value: parser.parse_value()?,
@@ -118,7 +122,11 @@ impl CommandParser<'_> {
             "MSET" => {
                 let (keys, values) = parser.parse_key_value_pairs()?;
                 Ok(Commands::Mset { keys, values })
-            }
+            },
+            "APPEND" => Ok(Commands::Append {
+                key: parser.parse_key()?,
+                value: parser.parse_value()?,
+            }),
             "LPUSH" => Ok(Commands::Lpush {
                 key: parser.parse_key()?,
                 value: parser.parse_value()?,

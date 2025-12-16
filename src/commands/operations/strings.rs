@@ -1,5 +1,5 @@
 use crate::{
-    commands::operations::generic::get_dbvalue,
+    commands::operations::{errors::get_missing_key_error_message, generic::get_dbvalue},
     storage::{Db, DbRef, DbValue, GetResult},
 };
 use std::{io, iter::zip, str::FromStr};
@@ -73,4 +73,14 @@ pub fn multiple_set(db: &mut DbRef<'_>, keys: &[String], values: &[String]) -> S
         message.push(format!("{}) {}", i + 1, value));
     }
     format!("+{}", message.join("\r\n")).to_string()
+}
+
+pub fn append(db: &mut DbRef<'_>, key: String, value: String) -> String {
+    match get_dbvalue(db, &key) {
+        GetResult::NotFound(_) => get_missing_key_error_message(key),
+        result => {
+            result.to_string().push_str(&value);
+            set_key(db, key.clone(), result.to_string())
+        }
+    }
 }

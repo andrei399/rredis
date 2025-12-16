@@ -1,15 +1,18 @@
 use tokio::io::Result;
-
 use crate::commands::operations::generic::{del_key_in_db, exists_in_db, get_dbvalue};
 use crate::commands::operations::lists::modify_list_in_db;
 use crate::commands::operations::strings::{
-    modify_integer, multiple_get, multiple_set, set_expiration, set_key,
+    append, modify_integer, multiple_get, multiple_set, set_expiration, set_key
 };
 use crate::storage::Db;
 
 pub enum Commands {
     Get {
         key: String,
+    },
+    Getset {
+        key: String,
+        value: String,
     },
     Set {
         key: String,
@@ -39,6 +42,10 @@ pub enum Commands {
         keys: Vec<String>,
         values: Vec<String>,
     },
+    Append {
+        key: String,
+        value: String
+    },
     Lpush {
         key: String,
         value: String,
@@ -54,6 +61,11 @@ impl Commands {
         let mut db = storage.pin();
         let result = match self {
             Commands::Get { key } => format!("{}", get_dbvalue(&mut db, &key)),
+            Commands::Getset { key, value } => {
+                let result = format!("{}", get_dbvalue(&mut db, &key));
+                set_key(&mut db, key.clone(), value.clone());
+                result
+            },
             Commands::Set { key, value } => set_key(&mut db, key.clone(), value.clone()),
             Commands::Setex {
                 key,
@@ -74,6 +86,7 @@ impl Commands {
                 .unwrap_or_else(|e| format!("-ERROR: {}", e.kind())),
             Commands::Mget { keys } => multiple_get(&mut db, keys),
             Commands::Mset { keys, values } => multiple_set(&mut db, keys, values),
+            Commands::Append { key, value } => append(&mut db, key.clone(), value.clone()),
             Commands::Lpush { key, value } => {
                 modify_list_in_db(&mut db, key, value, |list, value| {
                     list.insert(0, value.to_string())
