@@ -1,10 +1,10 @@
-use tokio::io::Result;
 use crate::commands::operations::generic::{del_key_in_db, exists_in_db, get_dbvalue};
 use crate::commands::operations::lists::modify_list_in_db;
 use crate::commands::operations::strings::{
-    append, modify_integer, multiple_get, multiple_set, set_expiration, set_key
+    append, modify_integer, multiple_get, multiple_set, set_expiration, set_key,
 };
 use crate::storage::Db;
+use tokio::io::Result;
 
 pub enum Commands {
     Get {
@@ -44,7 +44,7 @@ pub enum Commands {
     },
     Append {
         key: String,
-        value: String
+        value: String,
     },
     Lpush {
         key: String,
@@ -53,6 +53,12 @@ pub enum Commands {
     Rpush {
         key: String,
         value: String,
+    },
+    Lpop {
+        key: String,
+    },
+    Rpop {
+        key: String,
     },
 }
 
@@ -65,7 +71,7 @@ impl Commands {
                 let result = format!("{}", get_dbvalue(&mut db, &key));
                 set_key(&mut db, key.clone(), value.clone());
                 result
-            },
+            }
             Commands::Set { key, value } => set_key(&mut db, key.clone(), value.clone()),
             Commands::Setex {
                 key,
@@ -87,16 +93,18 @@ impl Commands {
             Commands::Mget { keys } => multiple_get(&mut db, keys),
             Commands::Mset { keys, values } => multiple_set(&mut db, keys, values),
             Commands::Append { key, value } => append(&mut db, key.clone(), value.clone()),
-            Commands::Lpush { key, value } => {
-                modify_list_in_db(&mut db, key, value, |list, value| {
-                    list.insert(0, value.to_string())
-                })
-            }
-            Commands::Rpush { key, value } => {
-                modify_list_in_db(&mut db, key, value, |list, value| {
-                    list.push(value.to_string())
-                })
-            }
+            Commands::Lpush { key, value } => modify_list_in_db(&mut db, key, value, |list, value| {
+                list.push_front(value.to_string());
+            }),
+            Commands::Rpush { key, value } => modify_list_in_db(&mut db, key, value, |list, value| {
+                list.push_back(value.to_string());
+            }),
+            Commands::Lpop { key } => modify_list_in_db(&mut db, key, "", |list, _| {
+                list.pop_front();
+            }),
+            Commands::Rpop { key } => modify_list_in_db(&mut db, key, "", |list, _| {
+                list.pop_back();
+            }),
         };
         Ok(result)
     }

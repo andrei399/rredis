@@ -135,6 +135,8 @@ impl CommandParser<'_> {
                 key: parser.parse_key()?,
                 value: parser.parse_value()?,
             }),
+            "LPOP" => Ok(Commands::Lpop { key: parser.parse_key()? }),
+            "RPOP" => Ok(Commands::Rpop { key: parser.parse_key()? }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "-ERROR: Unknown command.",
