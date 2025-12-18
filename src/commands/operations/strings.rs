@@ -47,7 +47,7 @@ pub fn modify_integer(
             db.update(key.to_string(), |_| DbValue::String(new_value.to_string()));
             Ok(format!("+{new_value}\r\n"))
         }
-        GetResult::NotFound(_) => Ok(format!("-ERROR: Key \"{}\" not found", key)),
+        GetResult::NotFound(key) => Ok(get_missing_key_error_message(key)),
         _ => Ok(String::from(
             "-ERROR: Cannot convert this type to an integer",
         )),

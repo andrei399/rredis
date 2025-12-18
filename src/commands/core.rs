@@ -5,6 +5,7 @@ use crate::commands::operations::lists::{
 use crate::commands::operations::strings::{
     append, modify_integer, multiple_get, multiple_set, set_expiration, set_key,
 };
+use crate::commands::operations::sets::{add_elements};
 use crate::storage::Db;
 use tokio::io::Result;
 
@@ -70,6 +71,10 @@ pub enum Commands {
         start: usize,
         stop: usize,
     },
+    Sadd {
+        key: String,
+        items: Vec<String>,
+    }
 }
 
 impl Commands {
@@ -123,6 +128,7 @@ impl Commands {
             Commands::Lrange { key, start, stop } => {
                 get_list_with_range(&mut db, key, start.clone(), stop.clone())
             }
+            Commands::Sadd { key, items } => add_elements(&mut db, key, items)
         };
         Ok(result)
     }

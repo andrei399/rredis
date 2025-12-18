@@ -16,14 +16,14 @@ impl CommandParser<'_> {
         })?;
         Ok(result)
     }
-    pub fn parse_key(&mut self) -> Result<String> {
+    fn parse_key(&mut self) -> Result<String> {
         Ok(self.base_parse("KEY")?.to_string())
     }
-    pub fn parse_value(&mut self) -> Result<String> {
+    fn parse_value(&mut self) -> Result<String> {
         Ok(self.base_parse("VALUE")?.to_string())
     }
-    pub fn parse_numeric_value<T>(&mut self, name: &str) -> Result<T>
-    where 
+    fn parse_numeric_value<T>(&mut self, name: &str) -> Result<T>
+    where
         T: FromStr,
         <T as FromStr>::Err: std::error::Error + Send + Sync + 'static,
     {
@@ -35,17 +35,17 @@ impl CommandParser<'_> {
         })?;
         Ok(seconds)
     }
-    pub fn parse_keys(&mut self) -> Result<Vec<String>> {
+    fn parse_multiple_parameters(&mut self) -> Result<Vec<String>> {
         let keys: Vec<String> = self.split.map(|s| s.to_string()).collect();
         if keys.is_empty() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "-ERROR: MGET requires at least one KEY parameter.",
+                "-ERROR: Command requires at least one parameter.",
             ));
         }
         Ok(keys)
     }
-    pub fn parse_key_value_pairs(&mut self) -> Result<(Vec<String>, Vec<String>)> {
+    fn parse_key_value_pairs(&mut self) -> Result<(Vec<String>, Vec<String>)> {
         let args: Vec<String> = self.split.map(|s| s.to_string()).collect();
         if args.is_empty() {
             return Err(io::Error::new(
@@ -120,7 +120,7 @@ impl CommandParser<'_> {
                 key: parser.parse_key()?,
             }),
             "MGET" => Ok(Commands::Mget {
-                keys: parser.parse_keys()?,
+                keys: parser.parse_multiple_parameters()?,
             }),
             "MSET" => {
                 let (keys, values) = parser.parse_key_value_pairs()?;
@@ -151,6 +151,10 @@ impl CommandParser<'_> {
                 key: parser.parse_key()?,
                 start: parser.parse_numeric_value("START")?,
                 stop: parser.parse_numeric_value("STOP")?,
+            }),
+            "SADD" => Ok(Commands::Sadd {
+                key: parser.parse_key()?,
+                items: parser.parse_multiple_parameters()?,
             }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
