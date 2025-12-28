@@ -1,4 +1,5 @@
 use papaya::HashMap;
+use ini::Ini;
 
 use crate::commands::parser::CommandParser;
 use crate::storage::Db;
@@ -10,7 +11,10 @@ pub mod storage;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let listener = TcpListener::bind("127.0.0.1:6969").await?;
+    let config = Ini::load_from_file("config.ini").unwrap();
+    let server_section = config.section(Some("server")).unwrap();
+    let port = server_section.get("PORT").and_then(|p| p.parse().ok()).unwrap_or(6379);
+    let listener = TcpListener::bind(format!("127.0.0.1:{port}")).await?;
     let storage: Db = Arc::new(HashMap::new());
 
     loop {
