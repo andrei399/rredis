@@ -2,8 +2,8 @@ use std::iter::zip;
 use std::str::FromStr;
 
 use crate::commands::operations::errors::get_missing_key_error_message;
+use crate::storage::{GetResult, format_hashmap, DbValue};
 use crate::{commands::operations::generic::get_dbvalue, storage::DbRef};
-use crate::storage::{GetResult, format_hashmap};
 use papaya::HashMap;
 
 pub fn set_hashmap(db: &mut DbRef<'_>, key: &str, fields: &[String], values: &[String]) -> String {
@@ -11,18 +11,16 @@ pub fn set_hashmap(db: &mut DbRef<'_>, key: &str, fields: &[String], values: &[S
     let hash_map = match get_dbvalue(db, key) {
         GetResult::FoundHashMap(hash_map) => hash_map,
         GetResult::NotFound(_) => HashMap::new(),
-        _ => {
-            return format!("-ERROR: Key '{key}' is already assigned to an incompatible type")
-        }
+        _ => return format!("-ERROR: Key '{key}' is already assigned to an incompatible type"),
     };
     {
         let pinned_hash_map = hash_map.pin();
         for (field, value) in zip(fields, values) {
             pinned_hash_map.insert(field.to_owned(), value.to_owned());
             count += 1;
-        };
+        }
     }
-    db.insert(key.to_string(), crate::storage::DbValue::HashMap(hash_map));
+    db.insert(key.to_string(), DbValue::HashMap(hash_map));
     format!("+{count}")
 }
 
@@ -46,4 +44,23 @@ pub fn get_all_fields_from_hashmap(db: &mut DbRef, key: &str) -> String {
         GetResult::NotFound(_) => return get_missing_key_error_message(key.to_string()),
         _ => return String::from_str("-ERROR: incompatible type").unwrap(),
     }
+}
+
+pub fn delete_fields_from_hashmap(db: &mut DbRef, key: &str, fields: &[String]) -> String {
+    let mut count = 0;
+    let hash_map = match get_dbvalue(db, key) {
+        GetResult::FoundHashMap(hash_map) => hash_map,
+        GetResult::NotFound(_) => return get_missing_key_error_message(key.to_string()),
+        _ => return String::from_str("-ERROR: incompatible type").unwrap(),
+    };
+    {
+        let pinned_hash_map = hash_map.pin();
+        for field in fields {
+            if pinned_hash_map.remove(field).is_some() {
+                count += 1;
+            };
+        }
+    }
+    db.insert(key.to_owned(), DbValue::HashMap(hash_map));
+    format!("+{count}")
 }

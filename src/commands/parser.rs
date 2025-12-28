@@ -174,6 +174,7 @@ impl CommandParser<'_> {
             },
             "HGET" => Ok(Commands::Hget { key: parser.parse_key()?, field: parser.parse_value()? }),
             "HGETALL" => Ok(Commands::Hgetall { key: parser.parse_key()? }),
+            "HDEL" => Ok(Commands::Hdel { key: parser.parse_key()?, fields: parser.parse_multiple_parameters()? }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "-ERROR: Unknown command.",
