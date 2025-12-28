@@ -1,13 +1,12 @@
 use papaya::HashMap;
 
+use crate::commands::parser::CommandParser;
+use crate::storage::Db;
 use std::sync::Arc;
 use tokio::io::{self, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use crate::storage::Db;
-use crate::commands::parser::CommandParser;
-pub mod storage;
 pub mod commands;
-
+pub mod storage;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {

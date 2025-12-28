@@ -21,11 +21,11 @@ pub fn add_elements_to_set(db: &mut DbRef, key: &str, items: &[String]) -> Strin
     let mut count = 0;
     let pinned_set = set.pin();
     for item in items {
-        if pinned_set.insert(item.clone()) {
+        if pinned_set.insert(item.to_owned()) {
             count += 1
         };
     }
-    db.insert(key.to_string(), DbValue::Set(set.clone()));
+    db.insert(key.to_string(), DbValue::Set(set.to_owned()));
     format!("+{}\r\n", count)
 }
 

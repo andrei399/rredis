@@ -20,7 +20,7 @@ pub fn modify_list_in_db(
         }
     };
     operation(&mut list, value.to_string());
-    db.insert(key.to_string(), DbValue::List(list.clone().into()));
+    db.insert(key.to_string(), DbValue::List(list.to_owned().into()));
     format!("+{:?}\r\n", list)
 }
 

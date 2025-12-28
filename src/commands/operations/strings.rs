@@ -6,7 +6,7 @@ use std::{io, iter::zip, str::FromStr};
 use tokio;
 
 pub fn set_key(db: &mut DbRef<'_>, key: String, value: String) -> String {
-    db.insert(key, DbValue::String(value.clone()));
+    db.insert(key, DbValue::String(value.to_owned()));
     format!("+{value}\r\n")
 }
 
@@ -17,14 +17,12 @@ pub fn set_expiration(
     value: String,
     timeout: u64,
 ) -> String {
-    db.insert(key.clone(), DbValue::String(value.clone()));
-    let key_clone = key.clone();
-    let duration_seconds = timeout.clone();
+    db.insert(key.to_owned(), DbValue::String(value.to_owned()));
     let storage_clone = storage.clone();
     tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(duration_seconds)).await;
-        let db = storage_clone.pin();
-        db.remove(key_clone.as_str());
+        tokio::time::sleep(std::time::Duration::from_secs(timeout)).await;
+        let db_pin = storage_clone.pin();
+        db_pin.remove(key.as_str());
     });
     String::from_str("+OK\r\n").unwrap()
 }
@@ -69,7 +67,7 @@ pub fn multiple_get(db: &mut DbRef<'_>, keys: &[String]) -> String {
 pub fn multiple_set(db: &mut DbRef<'_>, keys: &[String], values: &[String]) -> String {
     let mut message = Vec::new();
     for (i, (key, value)) in zip(keys, values).enumerate() {
-        db.insert(key.clone(), DbValue::String(value.clone()));
+        db.insert(key.to_owned(), DbValue::String(value.clone()));
         message.push(format!("{}) {}", i + 1, value));
     }
     format!("+{}", message.join("\r\n")).to_string()
