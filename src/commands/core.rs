@@ -5,7 +5,7 @@ use crate::commands::operations::lists::{
 use crate::commands::operations::strings::{
     append, modify_integer, multiple_get, multiple_set, set_expiration, set_key,
 };
-use crate::commands::operations::sets::{add_elements_to_set, remove_elements_from_set, show_set_memebers};
+use crate::commands::operations::sets::{add_elements_to_set, is_member, remove_elements_from_set, show_set_memebers};
 use crate::storage::Db;
 use tokio::io::Result;
 
@@ -81,6 +81,10 @@ pub enum Commands {
     },
     Smembers {
         key: String,
+    },
+    Sismember {
+        key: String,
+        value: String,
     }
 }
 
@@ -138,6 +142,7 @@ impl Commands {
             Commands::Sadd { key, items } => add_elements_to_set(&mut db, key, items),
             Commands::Srem { key, items } => remove_elements_from_set(&mut db, key, items),
             Commands::Smembers { key } => show_set_memebers(&mut db, key),
+            Commands::Sismember { key, value } => is_member(&mut db, key, value),
         };
         Ok(result)
     }

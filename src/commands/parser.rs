@@ -163,6 +163,10 @@ impl CommandParser<'_> {
             "SMEMBERS" => Ok(Commands::Smembers {
                 key: parser.parse_key()?,
             }),
+            "SISMEMBER" => Ok(Commands::Sismember {
+                key: parser.parse_key()?,
+                value: parser.parse_value()?,
+            }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "-ERROR: Unknown command.",
