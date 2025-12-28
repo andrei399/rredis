@@ -156,6 +156,13 @@ impl CommandParser<'_> {
                 key: parser.parse_key()?,
                 items: parser.parse_multiple_parameters()?,
             }),
+            "SREM" => Ok(Commands::Srem {
+                key: parser.parse_key()?,
+                items: parser.parse_multiple_parameters()?,
+            }),
+            "SMEMBERS" => Ok(Commands::Smembers {
+                key: parser.parse_key()?,
+            }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "-ERROR: Unknown command.",

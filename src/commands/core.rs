@@ -5,7 +5,7 @@ use crate::commands::operations::lists::{
 use crate::commands::operations::strings::{
     append, modify_integer, multiple_get, multiple_set, set_expiration, set_key,
 };
-use crate::commands::operations::sets::{add_elements};
+use crate::commands::operations::sets::{add_elements_to_set, remove_elements_from_set, show_set_memebers};
 use crate::storage::Db;
 use tokio::io::Result;
 
@@ -74,6 +74,13 @@ pub enum Commands {
     Sadd {
         key: String,
         items: Vec<String>,
+    },
+    Srem {
+        key: String,
+        items: Vec<String>,
+    },
+    Smembers {
+        key: String,
     }
 }
 
@@ -128,7 +135,9 @@ impl Commands {
             Commands::Lrange { key, start, stop } => {
                 get_list_with_range(&mut db, key, start.clone(), stop.clone())
             }
-            Commands::Sadd { key, items } => add_elements(&mut db, key, items)
+            Commands::Sadd { key, items } => add_elements_to_set(&mut db, key, items),
+            Commands::Srem { key, items } => remove_elements_from_set(&mut db, key, items),
+            Commands::Smembers { key } => show_set_memebers(&mut db, key),
         };
         Ok(result)
     }
