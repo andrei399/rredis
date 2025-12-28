@@ -1,5 +1,5 @@
 use crate::commands::operations::generic::{del_key_in_db, exists_in_db, get_dbvalue};
-use crate::commands::operations::hashmap::set_hashmap;
+use crate::commands::operations::hashmap::{get_all_fields_from_hashmap, get_field_from_hashmap, set_hashmap};
 use crate::commands::operations::lists::{
     get_list_with_range, len_of_list_in_db, modify_list_in_db,
 };
@@ -91,6 +91,13 @@ pub enum Commands {
         key: String,
         fields: Vec<String>,
         values: Vec<String>,
+    },
+    Hget {
+        key: String,
+        field: String,
+    },
+    Hgetall {
+        key: String,
     }
 }
 
@@ -150,6 +157,8 @@ impl Commands {
             Commands::Smembers { key } => show_set_memebers(&mut db, key),
             Commands::Sismember { key, value } => is_member(&mut db, key, value),
             Commands::Hset { key, fields, values } => set_hashmap(&mut db, key, fields, values),
+            Commands::Hget { key, field } => get_field_from_hashmap(&mut db, key, field),
+            Commands::Hgetall { key } => get_all_fields_from_hashmap(&mut db, key),
         };
         Ok(result)
     }

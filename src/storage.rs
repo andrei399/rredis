@@ -25,13 +25,13 @@ fn format_set(set: &HashSet<String>) -> String {
 fn format_hashmap_line(count: i32, value: &String) -> String {
     let mut result = String::new();
     result.push_str(&count.to_string());
-    result.push_str(")");
+    result.push_str(") ");
     result.push_str(value);
     result.push_str("\r\n");
     result
 }
 
-fn format_hashmap(hash_map: &HashMap<String, String>) -> String {
+pub fn format_hashmap(hash_map: &HashMap<String, String>) -> String {
     let mut hash_map_str = String::new();
     let mut count = 1;
     for item in hash_map.pin().iter() {

@@ -171,7 +171,9 @@ impl CommandParser<'_> {
                 let key = parser.parse_key()?;
                 let (fields, values) = parser.parse_key_value_pairs()?;
                 Ok(Commands::Hset { key, fields, values})
-            }
+            },
+            "HGET" => Ok(Commands::Hget { key: parser.parse_key()?, field: parser.parse_value()? }),
+            "HGETALL" => Ok(Commands::Hgetall { key: parser.parse_key()? }),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "-ERROR: Unknown command.",
