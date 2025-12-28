@@ -15,9 +15,10 @@ pub fn exists_in_db(db: &mut DbRef<'_>, key: &str) -> String {
 pub fn get_dbvalue(db: &mut DbRef<'_>, key: &str) -> GetResult {
     let result = match db.get(key) {
         Some(db_value) => match db_value {
-            DbValue::String(s) => GetResult::FoundString(s.clone()),
-            DbValue::List(l) => GetResult::FoundList(l.clone()),
-            DbValue::Set(s) => GetResult::FoundSet(s.clone()),
+            DbValue::String(s) => GetResult::FoundString(s.to_owned()),
+            DbValue::List(l) => GetResult::FoundList(l.to_owned()),
+            DbValue::Set(s) => GetResult::FoundSet(s.to_owned()),
+            DbValue::HashMap(h) => GetResult::FoundHashMap(h.to_owned())
         },
         None => GetResult::NotFound(key.to_string()),
     };

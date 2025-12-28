@@ -43,7 +43,7 @@ pub fn remove_elements_from_set(db: &mut DbRef, key: &str, items: &[String]) -> 
             count += 1
         };
     }
-    db.insert(key.to_string(), DbValue::Set(set.clone()));
+    db.insert(key.to_string(), DbValue::Set(set.to_owned()));
     format!("+{}\r\n", count)
 }
 
