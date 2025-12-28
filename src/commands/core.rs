@@ -1,4 +1,5 @@
 use crate::commands::operations::generic::{del_key_in_db, exists_in_db, get_dbvalue};
+use crate::commands::operations::hashmap::set_hashmap;
 use crate::commands::operations::lists::{
     get_list_with_range, len_of_list_in_db, modify_list_in_db,
 };
@@ -85,6 +86,11 @@ pub enum Commands {
     Sismember {
         key: String,
         value: String,
+    },
+    Hset {
+        key: String,
+        fields: Vec<String>,
+        values: Vec<String>,
     }
 }
 
@@ -95,10 +101,10 @@ impl Commands {
             Commands::Get { key } => format!("{}", get_dbvalue(&mut db, &key)),
             Commands::Getset { key, value } => {
                 let result = format!("{}", get_dbvalue(&mut db, &key));
-                set_key(&mut db, key.clone(), value.clone());
+                set_key(&mut db, key.to_owned(), value.to_owned());
                 result
             }
-            Commands::Set { key, value } => set_key(&mut db, key.clone(), value.clone()),
+            Commands::Set { key, value } => set_key(&mut db, key.to_owned(), value.to_owned()),
             Commands::Setex {
                 key,
                 seconds,
@@ -106,9 +112,9 @@ impl Commands {
             } => set_expiration(
                 storage,
                 &mut db,
-                key.clone(),
-                value.clone(),
-                seconds.clone(),
+                key.to_owned(),
+                value.to_owned(),
+                seconds.to_owned(),
             ),
             Commands::Del { key } => del_key_in_db(&mut db, &key),
             Commands::Exists { key } => exists_in_db(&mut db, &key),
@@ -118,7 +124,7 @@ impl Commands {
                 .unwrap_or_else(|e| format!("-ERROR: {}", e.kind())),
             Commands::Mget { keys } => multiple_get(&mut db, keys),
             Commands::Mset { keys, values } => multiple_set(&mut db, keys, values),
-            Commands::Append { key, value } => append(&mut db, key.clone(), value.clone()),
+            Commands::Append { key, value } => append(&mut db, key.to_owned(), value.to_owned()),
             Commands::Lpush { key, value } => {
                 modify_list_in_db(&mut db, key, value, |list, value| {
                     list.push_front(value.to_string());
@@ -137,12 +143,13 @@ impl Commands {
             }),
             Commands::Llen { key } => len_of_list_in_db(&mut db, key),
             Commands::Lrange { key, start, stop } => {
-                get_list_with_range(&mut db, key, start.clone(), stop.clone())
+                get_list_with_range(&mut db, key, start.to_owned(), stop.to_owned())
             }
             Commands::Sadd { key, items } => add_elements_to_set(&mut db, key, items),
             Commands::Srem { key, items } => remove_elements_from_set(&mut db, key, items),
             Commands::Smembers { key } => show_set_memebers(&mut db, key),
             Commands::Sismember { key, value } => is_member(&mut db, key, value),
+            Commands::Hset { key, fields, values } => set_hashmap(&mut db, key, fields, values),
         };
         Ok(result)
     }
