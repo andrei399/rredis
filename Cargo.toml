@@ -7,3 +7,5 @@ edition = "2024"
 papaya = "0.2.3"
 rust-ini = "0.21.3"
 tokio = { version = "1", features = ["full", "sync"] }
+diesel = { version = "2.2.0", features = ["sqlite", "returning_clauses_for_sqlite_3_35", "r2d2"] }
+dotenvy = "0.15"
