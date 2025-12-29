@@ -1,8 +1,8 @@
 use crate::{
-    commands::operations::{errors::get_missing_key_error_message, generic::get_dbvalue},
-    storage::{Db, DbRef, DbValue, GetResult},
+    commands::operations::{errors::get_missing_key_error_message, generic::get_dbvalue}, models::expiring_entry::ExpiringEntry, storage::{Db, DbRef, DbValue, GetResult}
 };
 use std::{io, iter::zip, str::FromStr};
+use diesel::SqliteConnection;
 use tokio;
 
 pub fn set_key(db: &mut DbRef<'_>, key: String, value: String) -> String {
@@ -16,14 +16,18 @@ pub fn set_expiration(
     key: String,
     value: String,
     timeout: u64,
+    _database: &mut SqliteConnection
 ) -> String {
     db.insert(key.to_owned(), DbValue::String(value.to_owned()));
+    ExpiringEntry::new(key.to_owned(), timeout as i64);
     let storage_clone = storage.clone();
+
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(timeout)).await;
         let db_pin = storage_clone.pin();
         db_pin.remove(key.as_str());
     });
+
     String::from_str("+OK\r\n").unwrap()
 }
 

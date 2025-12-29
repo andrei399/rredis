@@ -1,8 +1,9 @@
+use diesel::SqliteConnection;
 use papaya::HashMap;
 use ini::Ini;
 
 use crate::commands::parser::CommandParser;
-use crate::db::{DbPool, establish_connection_pool};
+use crate::db::establish_connection_pool;
 use crate::storage::Db;
 use std::sync::Arc;
 use tokio::io::{self, AsyncWriteExt};
@@ -10,6 +11,8 @@ use tokio::net::{TcpListener, TcpStream};
 pub mod commands;
 pub mod storage;
 pub mod db;
+pub mod models;
+pub mod schema;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -25,16 +28,16 @@ async fn main() -> io::Result<()> {
         println!("Accepted connection from: {}", addr);
 
         let storage_clone = storage.clone();
-        let database_pool_clone = database_pool.clone();
+        let mut db_connection = database_pool.get().expect("Could not establish a connection to the database.");
         tokio::spawn(async move {
-            if let Err(e) = handle_request(socket, &storage_clone, database_pool_clone).await {
+            if let Err(e) = handle_request(socket, &storage_clone, &mut db_connection).await {
                 eprintln!("Error handling request from {}: {}", addr, e)
             }
         });
     }
 }
 
-async fn handle_request(socket: TcpStream, storage: &Db, database: DbPool) -> io::Result<()> {
+async fn handle_request(socket: TcpStream, storage: &Db, database_connection: &mut SqliteConnection) -> io::Result<()> {
     let (read_half, mut write_half) = socket.into_split();
     let mut command = match CommandParser::parse_command(read_half).await {
         Ok(cmd) => cmd,
@@ -43,7 +46,7 @@ async fn handle_request(socket: TcpStream, storage: &Db, database: DbPool) -> io
             return Ok(());
         }
     };
-    let result = match command.execute(&storage, database).await {
+    let result = match command.execute(&storage, database_connection).await {
         Ok(result) => result,
         Err(e) => {
             write_half.write_all(format!("{e}\r\n").as_bytes()).await?;

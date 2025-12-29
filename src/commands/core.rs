@@ -11,8 +11,8 @@ use crate::commands::operations::sets::{
 use crate::commands::operations::strings::{
     append, modify_integer, multiple_get, multiple_set, set_expiration, set_key,
 };
-use crate::db::DbPool;
 use crate::storage::Db;
+use diesel::SqliteConnection;
 use tokio::io::Result;
 
 pub enum Commands {
@@ -111,7 +111,7 @@ pub enum Commands {
 }
 
 impl Commands {
-    pub async fn execute(&mut self, storage: &Db, _database: DbPool) -> Result<String> {
+    pub async fn execute(&mut self, storage: &Db, database: &mut SqliteConnection) -> Result<String> {
         let mut db = storage.pin();
         let result = match self {
             Commands::Get { key } => format!("{}", get_dbvalue(&mut db, &key)),
@@ -131,6 +131,7 @@ impl Commands {
                 key.to_owned(),
                 value.to_owned(),
                 seconds.to_owned(),
+                database,
             ),
             Commands::Del { key } => del_key_in_db(&mut db, &key),
             Commands::Exists { key } => exists_in_db(&mut db, &key),
